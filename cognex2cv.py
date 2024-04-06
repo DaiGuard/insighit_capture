@@ -1,14 +1,22 @@
+import time
 import cv2
 import numpy as np
 
-
 def cognex2cv(data: bytes):
+
+    start_time = time.time()
 
     tmp = data.split(b'\r\n')
     status = int(tmp[0].decode())
     size = int(tmp[1].decode())
     checksum = tmp[-2]
     image = tmp[2:-2]
+
+    end_time = time.time()
+    print(f'SPLIT: {end_time - start_time}')
+
+    start_time = time.time()
+
     image_data = b''
     for row in image:
         for i in range(0, len(row), 2):
@@ -17,6 +25,11 @@ def cognex2cv(data: bytes):
             one_byte_int = int(one_byte_str, 16)
             one_byte_hex = one_byte_int.to_bytes(1, 'big')
             image_data += one_byte_hex
+
+    end_time = time.time()
+    print(f'CONVERT: {end_time - start_time}')
+
+    start_time = time.time()
 
     header = image_data[:14]
     file_type = header[:2]
@@ -40,6 +53,10 @@ def cognex2cv(data: bytes):
 
     cv_image = np.frombuffer(pixels, np.uint8)
     cv_image = cv_image.reshape([image_height, image_width])
+
+    end_time = time.time()
+    print(f'READ: {end_time - start_time}')
+
     cv2.imwrite("test.jpg", cv_image)
     
     print(f'File Type  : {file_type}\n \
