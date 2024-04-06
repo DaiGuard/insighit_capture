@@ -1,14 +1,20 @@
 import socket
 import time
+import ctypes
+import numpy as np
 
-class inSightNativeClient:
+class InSightNativeClient:
 
-    def __init__(self, ip, port, username, password, timeout):
+    def __init__(self, ip, port, username, password, timeout, lib_path):
         self.server_ip = ip
         self.server_port = port
         self.server_timeout = timeout
         self.username = username
         self.password = password
+
+        print(lib_path)
+
+        self.libc = ctypes.cdll.LoadLibrary(lib_path)
 
         self.is_connected = False
         self.is_login = False
@@ -19,18 +25,22 @@ class inSightNativeClient:
         try:
             if self.is_connected:
                 self.socket.close()
+                self.is_login = False
                 self.is_connected = False
 
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
             self.socket.settimeout(self.server_timeout)
             self.socket.connect((self.server_ip, self.server_port))
+            self.is_login = False
             self.is_connected = True
 
-            return True
         except Exception as ex:
+            self.is_login = False
             self.is_connected = False
             print("socket connection error: {}".format(ex))
             return False
+        
+        return True
 
     def read_until_size(self, size):
         datas = self.recv_temp_buffer
@@ -92,6 +102,7 @@ class inSightNativeClient:
                 ret, recv_data = self.read_until_match(b'User: ')
                 if ret == 0:
                     self.is_login = False
+                    self.is_connected = True
                     print("failed to recv user string")
                     return False
                 
@@ -100,6 +111,7 @@ class inSightNativeClient:
                 ret = self.socket.send(send_data)
                 if ret != len(send_data):
                     self.is_login = False
+                    self.is_connected = True
                     print("failed to send username and password")
                     return False
                 
@@ -107,6 +119,7 @@ class inSightNativeClient:
                 ret, recv_data = self.read_until_match(b'Password: ')
                 if ret == 0:
                     self.is_login = False
+                    self.is_connected = True
                     print("failed to recv password string")
                     return False
 
@@ -115,6 +128,7 @@ class inSightNativeClient:
                 ret = self.socket.send(send_data)
                 if ret != len(send_data):
                     self.is_login = False
+                    self.is_connected = True
                     print("failed to send username and password")
                     return False
                 
@@ -126,14 +140,19 @@ class inSightNativeClient:
                     self.is_login = True
                     return True
                 else:
+                    self.is_login = False
+                    self.is_connected = True
+                    print("failed to login")
                     return False
             
             else:
                 self.is_login = False
+                self.is_connected = True
                 print("not connected")
                 return False
         except Exception as ex:
             self.is_login = False
+            self.is_connected = True
             print("login faled: {}".format(ex))
             return False
 
@@ -145,10 +164,11 @@ class inSightNativeClient:
             ret = self.socket.send(send_data)
             if ret != len(send_data):
                 self.is_login = False
+                self.is_connected = False
                 print("failed to send username and password")
                 return False
             
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             datas = b''
             try:
@@ -167,15 +187,55 @@ class inSightNativeClient:
             for row in image:
                 image_data += row
 
-            with open("data/log.txt", "w") as file:
-                file.write(f"{datas}")
-                # file.write(f"{status}\n")
-                # file.write(f"{size}\n")
-                # file.write(f"{checksum}\n")
-                # file.write(f"{image_data}\n")
 
-            return True
+            src = image_data.replace(b'\r\n', b'')
+            size = len(src)
+            c_size = ctypes.c_int(size)
+            np_src = np.frombuffer(src, np.uint8)
+            p_src = np_src.ctypes.data_as(ctypes.POINTER(ctypes.c_ubyte))
+            np_dst = np.array([0]*int(size/2), np.uint8)
+            p_dst = np_dst.ctypes.data_as(ctypes.POINTER(ctypes.c_ubyte))
+
+            c_res = self.libc.string2bytes(c_size, p_src, p_dst)
+
+            file_type = b"  "
+            file_size = 0
+            file_offset = 0
+
+            np_header = np_dst[:14]
+            p_header = np_header.ctypes.data_as(ctypes.POINTER(ctypes.c_ubyte))
+            c_file_type = ctypes.c_char_p(file_type)
+            c_file_size = ctypes.c_int(file_size)
+            p_file_size = ctypes.pointer(c_file_size)
+            c_file_offset = ctypes.c_int(file_offset)
+            p_file_offset = ctypes.pointer(c_file_offset)
+
+            c_res = self.libc.readHeader(p_header, c_file_type, p_file_size, p_file_offset)
+
+            file_type = c_file_type.value
+            file_size = c_file_size.value
+            file_offset = c_file_offset.value
+
+            image_width = 0
+            image_height = 0
+
+            np_info = np_dst[14:54]
+            p_info = np_info.ctypes.data_as(ctypes.POINTER(ctypes.c_ubyte))
+            c_image_width = ctypes.c_int(image_width)
+            p_image_width = ctypes.pointer(c_image_width)
+            c_image_height = ctypes.c_int(image_height)
+            p_image_height = ctypes.pointer(c_image_height)
+
+            c_res = self.libc.readInformation(p_info, p_image_width, p_image_height)
+
+            image_width = c_image_width.value
+            image_height = c_image_height.value
+
+            cv_image = np_dst[file_offset:file_offset+image_width*image_height]
+            cv_image = cv_image.reshape([image_height, image_width])
+
+            return cv_image
 
         else:
             print("not connected or not login")
-            return False
+            return None

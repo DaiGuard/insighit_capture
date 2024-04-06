@@ -1,4 +1,5 @@
-#include "insight_capture.h"
+#include <insight_capture_cpp_lib/insight_capture_cpp_lib.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
