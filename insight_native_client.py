@@ -165,7 +165,14 @@ class inSightNativeClient:
             image = tmp[2:-2]
             image_data = b''
             for row in image:
-                image_data =+ row
+                image_data += row
+
+            with open("data/log.txt", "w") as file:
+                file.write(f"{datas}")
+                # file.write(f"{status}\n")
+                # file.write(f"{size}\n")
+                # file.write(f"{checksum}\n")
+                # file.write(f"{image_data}\n")
 
             return True
 
