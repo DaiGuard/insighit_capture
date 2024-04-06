@@ -45,6 +45,9 @@ class InSightCapture(Node):
         # カメラ画像配信の登録
         self.image_pub = self.create_publisher(Image, "/camera", 10)
 
+        # タイマーコールバックの登録
+        self.timer = self.create_timer(1.0, self.timer_cb)
+
     def parameters_cb(self, params):
         for param in params:
             if param.name == "camera_ip":
@@ -56,7 +59,7 @@ class InSightCapture(Node):
             elif param.name == "camera_pw":
                 self.camera_pw = param.value
 
-    def run(self):
+    def timer_cb(self):
         if not self.client.is_connected:
             res = self.client.connect()
         else:
@@ -64,6 +67,8 @@ class InSightCapture(Node):
                 res = self.client.login()
             else:
                 image = self.client.capture()
-
-                msg = CvBridge.cv2_to_imgmsg(image)
-                self.image_pub.publish(msg)
+                if image:
+                    msg = CvBridge.cv2_to_imgmsg(image)
+                    self.image_pub.publish(msg)
+                else:
+                    self.client.close()

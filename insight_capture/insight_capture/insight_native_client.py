@@ -12,14 +12,17 @@ class InSightNativeClient:
         self.username = username
         self.password = password
 
-        print(lib_path)
-
         self.libc = ctypes.cdll.LoadLibrary(lib_path)
 
         self.is_connected = False
         self.is_login = False
 
         self.recv_temp_buffer = b''
+
+    def close(self):
+        self.socket.close()
+        self.is_connected = False
+        self.is_connected = False
 
     def connect(self):
         try:
