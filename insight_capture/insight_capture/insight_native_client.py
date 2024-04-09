@@ -2,6 +2,7 @@ import socket
 import time
 import ctypes
 import numpy as np
+import cv2
 
 class InSightNativeClient:
 
@@ -141,6 +142,7 @@ class InSightNativeClient:
                 ret, recv_data = self.read_until_match(b'\r\n')
                 if ret > 0 and b'User Logged In' in recv_data:
                     self.is_login = True
+
                     return True
                 else:
                     self.is_login = False
@@ -169,7 +171,7 @@ class InSightNativeClient:
                 self.is_login = False
                 self.is_connected = False
                 print("failed to send username and password")
-                return False
+                return False, None
             
             time.sleep(0.1)
 
@@ -178,7 +180,7 @@ class InSightNativeClient:
                 while True:
                     data = self.socket.recv(1024)
                     datas += data
-            except TimeoutError:
+            except socket.timeout:
                 pass
             
             tmp = datas.split(b'\r\n')
@@ -189,7 +191,6 @@ class InSightNativeClient:
             image_data = b''
             for row in image:
                 image_data += row
-
 
             src = image_data.replace(b'\r\n', b'')
             size = len(src)
@@ -236,9 +237,9 @@ class InSightNativeClient:
 
             cv_image = np_dst[file_offset:file_offset+image_width*image_height]
             cv_image = cv_image.reshape([image_height, image_width])
-
-            return cv_image
+            cv_image = cv2.flip(cv_image, 0)
+            return True, cv_image
 
         else:
             print("not connected or not login")
-            return None
+            return False, None

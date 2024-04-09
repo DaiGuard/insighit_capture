@@ -4,6 +4,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
 from insight_capture.insight_native_client import InSightNativeClient
+import cv2
 
 class InSightCapture(Node):
 
@@ -62,13 +63,21 @@ class InSightCapture(Node):
     def timer_cb(self):
         if not self.client.is_connected:
             res = self.client.connect()
+            if res:
+                print("success to connect")
+            else:
+                print("faield to connect")
         else:
             if not self.client.is_login:
                 res = self.client.login()
+                if res:
+                    print("success to login")
+                else:
+                    print("faield to login")
             else:
-                image = self.client.capture()
-                if image:
-                    msg = CvBridge.cv2_to_imgmsg(image)
+                ret, image = self.client.capture()
+                if ret:
+                    msg = self.bridge.cv2_to_imgmsg(image, "mono8")
                     self.image_pub.publish(msg)
                 else:
                     self.client.close()
